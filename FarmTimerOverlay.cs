@@ -323,13 +323,18 @@ namespace FarmTimerOverlay
 
     public static class LootAlertPlayer
     {
-        public static void PlayPulsePip()
+        public static void PlayPulsePip(double volume)
         {
+            double gain = ClampVolume(volume);
+            if (gain <= 0.0001)
+            {
+                return;
+            }
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
-                    using (MemoryStream stream = BuildPulsePipWave())
+                    using (MemoryStream stream = BuildPulsePipWave(gain))
                     using (SoundPlayer player = new SoundPlayer(stream))
                     {
                         player.PlaySync();
@@ -341,13 +346,18 @@ namespace FarmTimerOverlay
             });
         }
 
-        public static void PlayDoubleTing()
+        public static void PlayDoubleTing(double volume)
         {
+            double gain = ClampVolume(volume);
+            if (gain <= 0.0001)
+            {
+                return;
+            }
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
-                    using (MemoryStream stream = BuildDoubleTingWave())
+                    using (MemoryStream stream = BuildDoubleTingWave(gain))
                     using (SoundPlayer player = new SoundPlayer(stream))
                     {
                         player.PlaySync();
@@ -359,7 +369,7 @@ namespace FarmTimerOverlay
             });
         }
 
-        private static MemoryStream BuildPulsePipWave()
+        private static MemoryStream BuildPulsePipWave(double volume)
         {
             const int sampleRate = 44100;
             const short channels = 1;
@@ -392,7 +402,7 @@ namespace FarmTimerOverlay
                 double body =
                     Math.Sin(2.0 * Math.PI * 880.0 * t) +
                     0.18 * Math.Sin(2.0 * Math.PI * 1760.0 * t);
-                double value = body * attack * decay * 0.16;
+                double value = body * attack * decay * 0.16 * volume;
                 value = Math.Max(-1.0, Math.Min(1.0, value));
                 writer.Write((short)(value * short.MaxValue));
             }
@@ -402,7 +412,7 @@ namespace FarmTimerOverlay
             return stream;
         }
 
-        private static MemoryStream BuildDoubleTingWave()
+        private static MemoryStream BuildDoubleTingWave(double volume)
         {
             const int sampleRate = 44100;
             const short channels = 1;
@@ -433,6 +443,7 @@ namespace FarmTimerOverlay
                 double value =
                     BellStrike(t, 0.025, 1174.66) +
                     BellStrike(t, 0.355, 1567.98);
+                value *= volume;
                 value = Math.Max(-1.0, Math.Min(1.0, value));
                 writer.Write((short)(value * short.MaxValue));
             }
@@ -458,6 +469,11 @@ namespace FarmTimerOverlay
                 0.12 * Math.Sin(2.0 * Math.PI * frequency * 3.94 * local);
             return body * attack * decay * 0.48;
         }
+
+        private static double ClampVolume(double volume)
+        {
+            return Math.Max(0.0, Math.Min(1.0, volume));
+        }
     }
 
     public sealed class OverlaySettings
@@ -471,6 +487,9 @@ namespace FarmTimerOverlay
         public double FarmSeconds = 105.0;
         public bool FlashLootAlert = true;
         public bool SoundLootAlert = true;
+        public bool PulseSoundAlert = true;
+        public bool LootTingSoundAlert = true;
+        public double SoundAlertVolume = 1.0;
 
         private OverlaySettings(string settingsPath)
         {
@@ -533,6 +552,20 @@ namespace FarmTimerOverlay
                     else if (key == "SoundLootAlert" && bool.TryParse(value, out flag))
                     {
                         settings.SoundLootAlert = flag;
+                        settings.PulseSoundAlert = flag;
+                        settings.LootTingSoundAlert = flag;
+                    }
+                    else if (key == "PulseSoundAlert" && bool.TryParse(value, out flag))
+                    {
+                        settings.PulseSoundAlert = flag;
+                    }
+                    else if (key == "LootTingSoundAlert" && bool.TryParse(value, out flag))
+                    {
+                        settings.LootTingSoundAlert = flag;
+                    }
+                    else if (key == "SoundAlertVolume" && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    {
+                        settings.SoundAlertVolume = Math.Max(0.0, Math.Min(1.0, number));
                     }
                 }
             }
@@ -559,7 +592,10 @@ namespace FarmTimerOverlay
                     "Custom=" + CustomMode.ToString(CultureInfo.InvariantCulture),
                     "FarmSeconds=" + FarmSeconds.ToString("0", CultureInfo.InvariantCulture),
                     "FlashLootAlert=" + FlashLootAlert.ToString(CultureInfo.InvariantCulture),
-                    "SoundLootAlert=" + SoundLootAlert.ToString(CultureInfo.InvariantCulture)
+                    "SoundLootAlert=" + SoundLootAlert.ToString(CultureInfo.InvariantCulture),
+                    "PulseSoundAlert=" + PulseSoundAlert.ToString(CultureInfo.InvariantCulture),
+                    "LootTingSoundAlert=" + LootTingSoundAlert.ToString(CultureInfo.InvariantCulture),
+                    "SoundAlertVolume=" + SoundAlertVolume.ToString("0.00", CultureInfo.InvariantCulture)
                 });
             }
             catch
@@ -911,8 +947,8 @@ namespace FarmTimerOverlay
             phasePill = new Border
             {
                 CornerRadius = new CornerRadius(999),
-                Padding = new Thickness(12, 4, 12, 4),
-                MinWidth = 104,
+                Padding = new Thickness(14, 4, 14, 4),
+                MinWidth = 112,
                 Background = new SolidColorBrush(Color.FromArgb(30, 105, 171, 255)),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center
@@ -928,7 +964,7 @@ namespace FarmTimerOverlay
                 Width = 6,
                 Height = 6,
                 Fill = farmAccent,
-                Margin = new Thickness(0, 0, 7, 0),
+                Margin = new Thickness(0, 0, 8, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
             phaseText = new TextBlock
@@ -939,7 +975,7 @@ namespace FarmTimerOverlay
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
-                Margin = new Thickness(0, 0, 1, 0),
+                Margin = new Thickness(1, 0, 2, 0),
                 TextWrapping = TextWrapping.NoWrap,
                 FontFamily = new FontFamily("Segoe UI")
             };
@@ -1229,6 +1265,8 @@ namespace FarmTimerOverlay
             bool shouldPulseSound = timer.IsRunning &&
                                     isFarm &&
                                     settings.SoundLootAlert &&
+                                    settings.PulseSoundAlert &&
+                                    settings.SoundAlertVolume > 0.0001 &&
                                     phaseRemaining > 0.0 &&
                                     phaseRemaining <= 5.0;
             if (shouldPulseSound && !preLootSoundActive)
@@ -1242,9 +1280,11 @@ namespace FarmTimerOverlay
 
             if (timer.IsRunning && previousFarmPhase && !isFarm)
             {
-                if (settings.SoundLootAlert)
+                if (settings.SoundLootAlert &&
+                    settings.LootTingSoundAlert &&
+                    settings.SoundAlertVolume > 0.0001)
                 {
-                    LootAlertPlayer.PlayDoubleTing();
+                    LootAlertPlayer.PlayDoubleTing(settings.SoundAlertVolume);
                 }
             }
             previousFarmPhase = isFarm;
@@ -1277,13 +1317,16 @@ namespace FarmTimerOverlay
                 preLootSoundTimer = new DispatcherTimer(DispatcherPriority.Background);
                 preLootSoundTimer.Tick += delegate
                 {
-                    if (!preLootSoundActive || !settings.SoundLootAlert)
+                    if (!preLootSoundActive ||
+                        !settings.SoundLootAlert ||
+                        !settings.PulseSoundAlert ||
+                        settings.SoundAlertVolume <= 0.0001)
                     {
                         StopPreLootPulseSound();
                         return;
                     }
 
-                    LootAlertPlayer.PlayPulsePip();
+                    LootAlertPlayer.PlayPulsePip(settings.SoundAlertVolume);
                     if (preLootSoundFirstTick)
                     {
                         preLootSoundFirstTick = false;
@@ -1492,6 +1535,15 @@ namespace FarmTimerOverlay
         private Ellipse flashThumb;
         private Border soundToggle;
         private Ellipse soundThumb;
+        private Border pulseSoundToggle;
+        private Ellipse pulseSoundThumb;
+        private Border lootTingSoundToggle;
+        private Ellipse lootTingSoundThumb;
+        private Slider soundVolumeSlider;
+        private TextBlock soundVolumeValueText;
+        private StackPanel soundDetailsPanel;
+        private TextBlock soundChevronText;
+        private bool soundDetailsExpanded;
         private Grid splitSlider;
         private Border splitFarmFill;
         private Border splitThumb;
@@ -1946,22 +1998,7 @@ namespace FarmTimerOverlay
             };
             alertStack.Children.Add(divider);
 
-            Grid soundRow = MakeToggleSettingRow(
-                "Sound Alert",
-                "Pip theo nh\u1ECBp 5 gi\u00E2y cu\u1ED1i FARM + ting ting khi b\u1EAFt \u0111\u1EA7u LOOT",
-                settings.SoundLootAlert,
-                delegate(bool enabled)
-                {
-                    settings.SoundLootAlert = enabled;
-                    settings.Save();
-                    if (enabled)
-                    {
-                        LootAlertPlayer.PlayDoubleTing();
-                    }
-                },
-                out soundToggle,
-                out soundThumb);
-            alertStack.Children.Add(soundRow);
+            alertStack.Children.Add(BuildSoundAlertSection());
             alertCard.Child = alertStack;
             Grid.SetRow(alertCard, 5);
             root.Children.Add(alertCard);
@@ -1991,6 +2028,208 @@ namespace FarmTimerOverlay
             root.Children.Add(footer);
 
             return frame;
+        }
+
+        private UIElement BuildSoundAlertSection()
+        {
+            StackPanel wrapper = new StackPanel();
+
+            Grid masterRow = MakeToggleSettingRow(
+                "Sound Alert",
+                "B\u1EADt/t\u1EAFt to\u00E0n b\u1ED9 \u00E2m b\u00E1o",
+                settings.SoundLootAlert,
+                delegate(bool enabled)
+                {
+                    settings.SoundLootAlert = enabled;
+                    settings.Save();
+                    if (enabled && settings.SoundAlertVolume > 0.0001)
+                    {
+                        if (settings.LootTingSoundAlert)
+                        {
+                            LootAlertPlayer.PlayDoubleTing(settings.SoundAlertVolume);
+                        }
+                        else if (settings.PulseSoundAlert)
+                        {
+                            LootAlertPlayer.PlayPulsePip(settings.SoundAlertVolume);
+                        }
+                    }
+                },
+                out soundToggle,
+                out soundThumb);
+            masterRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(soundToggle, 2);
+
+            Border expandButton = new Border
+            {
+                Width = 26,
+                Height = 26,
+                CornerRadius = new CornerRadius(7),
+                Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+                Margin = new Thickness(8, 0, 8, 0),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            soundChevronText = new TextBlock
+            {
+                Text = "\u25BE",
+                Foreground = textMuted,
+                FontSize = 13,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontFamily = new FontFamily("Segoe UI Symbol")
+            };
+            expandButton.Child = soundChevronText;
+            expandButton.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { e.Handled = true; };
+            expandButton.MouseLeftButtonUp += delegate(object sender, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                SetSoundDetailsExpanded(!soundDetailsExpanded);
+            };
+            expandButton.MouseEnter += delegate { expandButton.Background = new SolidColorBrush(Color.FromArgb(34, 255, 255, 255)); };
+            expandButton.MouseLeave += delegate { expandButton.Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)); };
+            Grid.SetColumn(expandButton, 1);
+            masterRow.Children.Add(expandButton);
+            wrapper.Children.Add(masterRow);
+
+            soundDetailsPanel = new StackPanel
+            {
+                Margin = new Thickness(18, 11, 0, 0),
+                Visibility = Visibility.Collapsed
+            };
+
+            Grid pulseRow = MakeToggleSettingRow(
+                "Pip theo nh\u1ECBp",
+                "Pip nh\u1EB9 sync v\u1EDBi m\u1ED7i \u0111\u1EC9nh nh\u00E1y \u0111\u1ECF",
+                settings.PulseSoundAlert,
+                delegate(bool enabled)
+                {
+                    settings.PulseSoundAlert = enabled;
+                    settings.Save();
+                    if (enabled && settings.SoundLootAlert && settings.SoundAlertVolume > 0.0001)
+                    {
+                        LootAlertPlayer.PlayPulsePip(settings.SoundAlertVolume);
+                    }
+                },
+                out pulseSoundToggle,
+                out pulseSoundThumb);
+            soundDetailsPanel.Children.Add(pulseRow);
+
+            soundDetailsPanel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+                Margin = new Thickness(0, 8, 0, 8)
+            });
+
+            Grid lootTingRow = MakeToggleSettingRow(
+                "Ting ting LOOT",
+                "2 ti\u1EBFng chime khi b\u1EAFt \u0111\u1EA7u giai \u0111o\u1EA1n LOOT",
+                settings.LootTingSoundAlert,
+                delegate(bool enabled)
+                {
+                    settings.LootTingSoundAlert = enabled;
+                    settings.Save();
+                    if (enabled && settings.SoundLootAlert && settings.SoundAlertVolume > 0.0001)
+                    {
+                        LootAlertPlayer.PlayDoubleTing(settings.SoundAlertVolume);
+                    }
+                },
+                out lootTingSoundToggle,
+                out lootTingSoundThumb);
+            soundDetailsPanel.Children.Add(lootTingRow);
+
+            soundDetailsPanel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+                Margin = new Thickness(0, 8, 0, 8)
+            });
+
+            Grid volumeRow = new Grid();
+            volumeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            volumeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            volumeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            volumeRow.Children.Add(new TextBlock
+            {
+                Text = "Volume",
+                Foreground = textPrimary,
+                FontSize = 9.5,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontFamily = new FontFamily("Segoe UI")
+            });
+            soundVolumeSlider = new Slider
+            {
+                Minimum = 0,
+                Maximum = 100,
+                TickFrequency = 1,
+                IsSnapToTickEnabled = false,
+                Value = settings.SoundAlertVolume * 100.0,
+                Height = 24,
+                Margin = new Thickness(12, 0, 12, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            soundVolumeSlider.ValueChanged += delegate
+            {
+                if (soundVolumeValueText == null)
+                {
+                    return;
+                }
+                int value = (int)Math.Round(soundVolumeSlider.Value);
+                settings.SoundAlertVolume = value / 100.0;
+                soundVolumeValueText.Text = value.ToString(CultureInfo.InvariantCulture) + "%";
+                settings.Save();
+            };
+            soundVolumeSlider.PreviewMouseLeftButtonUp += delegate
+            {
+                if (!settings.SoundLootAlert || settings.SoundAlertVolume <= 0.0001)
+                {
+                    return;
+                }
+                if (settings.PulseSoundAlert)
+                {
+                    LootAlertPlayer.PlayPulsePip(settings.SoundAlertVolume);
+                }
+                else if (settings.LootTingSoundAlert)
+                {
+                    LootAlertPlayer.PlayDoubleTing(settings.SoundAlertVolume);
+                }
+            };
+            Grid.SetColumn(soundVolumeSlider, 1);
+            volumeRow.Children.Add(soundVolumeSlider);
+            soundVolumeValueText = new TextBlock
+            {
+                Text = ((int)Math.Round(settings.SoundAlertVolume * 100.0)).ToString(CultureInfo.InvariantCulture) + "%",
+                Foreground = textPrimary,
+                FontSize = 9.5,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontFamily = new FontFamily("Segoe UI")
+            };
+            Grid.SetColumn(soundVolumeValueText, 2);
+            volumeRow.Children.Add(soundVolumeValueText);
+            soundDetailsPanel.Children.Add(volumeRow);
+
+            wrapper.Children.Add(soundDetailsPanel);
+            return wrapper;
+        }
+
+        private void SetSoundDetailsExpanded(bool expanded)
+        {
+            soundDetailsExpanded = expanded;
+            if (soundDetailsPanel != null)
+            {
+                soundDetailsPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            }
+            if (soundChevronText != null)
+            {
+                soundChevronText.Text = expanded ? "\u25B4" : "\u25BE";
+            }
+            Height = expanded ? 738 : 590;
+            if (hwnd != IntPtr.Zero)
+            {
+                Dispatcher.BeginInvoke(new Action(delegate { NativeWindowShape.ApplyRoundedRegion(this, hwnd, 20); }));
+            }
         }
 
         private Border MakeCard()
@@ -2261,6 +2500,16 @@ namespace FarmTimerOverlay
             opacityValueText.Text = ((int)Math.Round(overlay.Opacity * 100.0)).ToString(CultureInfo.InvariantCulture) + "%";
             SetToggleVisual(flashToggle, flashThumb, settings.FlashLootAlert);
             SetToggleVisual(soundToggle, soundThumb, settings.SoundLootAlert);
+            SetToggleVisual(pulseSoundToggle, pulseSoundThumb, settings.PulseSoundAlert);
+            SetToggleVisual(lootTingSoundToggle, lootTingSoundThumb, settings.LootTingSoundAlert);
+            if (soundVolumeSlider != null)
+            {
+                soundVolumeSlider.Value = Math.Round(settings.SoundAlertVolume * 100.0);
+            }
+            if (soundVolumeValueText != null)
+            {
+                soundVolumeValueText.Text = ((int)Math.Round(settings.SoundAlertVolume * 100.0)).ToString(CultureInfo.InvariantCulture) + "%";
+            }
         }
 
         public void ForceClose()

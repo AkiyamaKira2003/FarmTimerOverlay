@@ -17,8 +17,10 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Adjustable FARM / LOOT split
 - Modern two-phase progress preview
 - Red pre-LOOT warning during the final 5 seconds of FARM
-- Sound Alert: soft pip synced to each red pulse during the final 5 seconds of FARM
-- Sound Alert: double ting-ting when LOOT begins
+- Sound Alert master toggle with expandable controls
+- Separate toggle for the soft pip synced to each red pulse during the final 5 seconds of FARM
+- Separate toggle for the double ting-ting when LOOT begins
+- In-app Sound Alert volume slider (0-100%)
 - Overlay opacity control
 - Tray controls for pause/resume, reset and exit
 - Settings saved under %LOCALAPPDATA%\FarmTimerOverlay
