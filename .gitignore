@@ -1,0 +1,12 @@
+.dotnet-sdk/
+bin/
+obj/
+Release-OneFile/
+Release-Portable/
+FarmTimerOverlay.exe
+dotnet-install.ps1
+overlay-current.png
+*.user
+*.suo
+*.pdb
+
