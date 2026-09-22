@@ -1877,7 +1877,7 @@ namespace FarmTimerOverlay
             close.MouseLeftButtonUp += delegate(object sender, MouseButtonEventArgs e)
             {
                 e.Handled = true;
-                Hide();
+                exitAction();
             };
             windowButtons.Children.Add(minimize);
             windowButtons.Children.Add(close);
@@ -2387,6 +2387,7 @@ namespace FarmTimerOverlay
             };
             Grid.SetColumn(soundVolumeValueText, 2);
             volumeRow.Children.Add(soundVolumeValueText);
+            wrapper.Children.Add(volumeRow);
 
             Grid pulseRow = MakeToggleSettingRow(
                 "Pip theo nh\u1ECBp",
@@ -2419,13 +2420,6 @@ namespace FarmTimerOverlay
                 out lootTingSoundToggle,
                 out lootTingSoundThumb);
             StackPanel popupStack = new StackPanel();
-            popupStack.Children.Add(volumeRow);
-            popupStack.Children.Add(new Border
-            {
-                Height = 1,
-                Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
-                Margin = new Thickness(0, 8, 0, 8)
-            });
             popupStack.Children.Add(pulseRow);
             popupStack.Children.Add(new Border
             {
@@ -2765,7 +2759,7 @@ namespace FarmTimerOverlay
             if (!allowClose)
             {
                 e.Cancel = true;
-                Hide();
+                Dispatcher.BeginInvoke(new Action(exitAction));
             }
         }
 

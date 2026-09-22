@@ -23,6 +23,7 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Double ting-ting when LOOT begins
 - Custom rounded Opacity and Volume sliders matching the FARM/LOOT split control
 - Tray controls for pause/resume, reset and exit
+- Close button (X) and Alt+F4 fully exit the app instead of hiding it
 - Settings saved under %LOCALAPPDATA%\FarmTimerOverlay
 - Single-instance behavior
 
