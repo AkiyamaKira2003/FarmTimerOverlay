@@ -17,7 +17,8 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Adjustable FARM / LOOT split
 - Modern two-phase progress preview
 - Red pre-LOOT warning during the final 5 seconds of FARM
-- Double ting-ting sound when LOOT begins
+- Sound Alert: soft pip synced to each red pulse during the final 5 seconds of FARM
+- Sound Alert: double ting-ting when LOOT begins
 - Overlay opacity control
 - Tray controls for pause/resume, reset and exit
 - Settings saved under %LOCALAPPDATA%\FarmTimerOverlay
@@ -34,4 +35,3 @@ It includes the .NET 8 runtime and does not require a separate .NET installation
 Project: FarmTimerOverlay.Portable.csproj
 
 Target: net8.0-windows / win-x64 / self-contained / single-file
-

@@ -323,6 +323,24 @@ namespace FarmTimerOverlay
 
     public static class LootAlertPlayer
     {
+        public static void PlayPulsePip()
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    using (MemoryStream stream = BuildPulsePipWave())
+                    using (SoundPlayer player = new SoundPlayer(stream))
+                    {
+                        player.PlaySync();
+                    }
+                }
+                catch
+                {
+                }
+            });
+        }
+
         public static void PlayDoubleTing()
         {
             ThreadPool.QueueUserWorkItem(delegate
@@ -339,6 +357,49 @@ namespace FarmTimerOverlay
                 {
                 }
             });
+        }
+
+        private static MemoryStream BuildPulsePipWave()
+        {
+            const int sampleRate = 44100;
+            const short channels = 1;
+            const short bitsPerSample = 16;
+            const double duration = 0.095;
+            int sampleCount = (int)(sampleRate * duration);
+            int dataLength = sampleCount * channels * (bitsPerSample / 8);
+
+            MemoryStream stream = new MemoryStream(44 + dataLength);
+            BinaryWriter writer = new BinaryWriter(stream, Encoding.ASCII);
+            writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+            writer.Write(36 + dataLength);
+            writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+            writer.Write(Encoding.ASCII.GetBytes("fmt "));
+            writer.Write(16);
+            writer.Write((short)1);
+            writer.Write(channels);
+            writer.Write(sampleRate);
+            writer.Write(sampleRate * channels * (bitsPerSample / 8));
+            writer.Write((short)(channels * (bitsPerSample / 8)));
+            writer.Write(bitsPerSample);
+            writer.Write(Encoding.ASCII.GetBytes("data"));
+            writer.Write(dataLength);
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                double t = i / (double)sampleRate;
+                double attack = Math.Min(1.0, t / 0.004);
+                double decay = Math.Exp(-34.0 * t);
+                double body =
+                    Math.Sin(2.0 * Math.PI * 880.0 * t) +
+                    0.18 * Math.Sin(2.0 * Math.PI * 1760.0 * t);
+                double value = body * attack * decay * 0.16;
+                value = Math.Max(-1.0, Math.Min(1.0, value));
+                writer.Write((short)(value * short.MaxValue));
+            }
+
+            writer.Flush();
+            stream.Position = 0;
+            return stream;
         }
 
         private static MemoryStream BuildDoubleTingWave()
@@ -746,6 +807,9 @@ namespace FarmTimerOverlay
         private bool phaseStateInitialized;
         private bool previousFarmPhase;
         private bool flashActive;
+        private DispatcherTimer preLootSoundTimer;
+        private bool preLootSoundActive;
+        private bool preLootSoundFirstTick;
 
         private readonly SolidColorBrush farmAccent = new SolidColorBrush(Color.FromRgb(105, 171, 255));
         private readonly SolidColorBrush lootAccent = new SolidColorBrush(Color.FromRgb(255, 199, 92));
@@ -1157,6 +1221,20 @@ namespace FarmTimerOverlay
                 StopPreLootFlash(isFarm);
             }
 
+            bool shouldPulseSound = timer.IsRunning &&
+                                    isFarm &&
+                                    settings.SoundLootAlert &&
+                                    phaseRemaining > 0.0 &&
+                                    phaseRemaining <= 5.0;
+            if (shouldPulseSound && !preLootSoundActive)
+            {
+                StartPreLootPulseSound();
+            }
+            else if (!shouldPulseSound && preLootSoundActive)
+            {
+                StopPreLootPulseSound();
+            }
+
             if (timer.IsRunning && previousFarmPhase && !isFarm)
             {
                 if (settings.SoundLootAlert)
@@ -1182,6 +1260,48 @@ namespace FarmTimerOverlay
                 RepeatBehavior = RepeatBehavior.Forever
             };
             flashBrush.BeginAnimation(SolidColorBrush.ColorProperty, animation);
+        }
+
+        private void StartPreLootPulseSound()
+        {
+            preLootSoundActive = true;
+            preLootSoundFirstTick = true;
+
+            if (preLootSoundTimer == null)
+            {
+                preLootSoundTimer = new DispatcherTimer(DispatcherPriority.Background);
+                preLootSoundTimer.Tick += delegate
+                {
+                    if (!preLootSoundActive || !settings.SoundLootAlert)
+                    {
+                        StopPreLootPulseSound();
+                        return;
+                    }
+
+                    LootAlertPlayer.PlayPulsePip();
+                    if (preLootSoundFirstTick)
+                    {
+                        preLootSoundFirstTick = false;
+                        preLootSoundTimer.Interval = TimeSpan.FromMilliseconds(480);
+                    }
+                };
+            }
+
+            // The visual reaches peak red after 240 ms, so the first pip lands
+            // exactly on that peak. Later pips repeat with the 480 ms flash cycle.
+            preLootSoundTimer.Stop();
+            preLootSoundTimer.Interval = TimeSpan.FromMilliseconds(240);
+            preLootSoundTimer.Start();
+        }
+
+        private void StopPreLootPulseSound()
+        {
+            preLootSoundActive = false;
+            preLootSoundFirstTick = false;
+            if (preLootSoundTimer != null)
+            {
+                preLootSoundTimer.Stop();
+            }
         }
 
         private void StopPreLootFlash(bool isFarm)
@@ -1305,6 +1425,7 @@ namespace FarmTimerOverlay
 
         protected override void OnClosed(EventArgs e)
         {
+            StopPreLootPulseSound();
             if (hwnd != IntPtr.Zero)
             {
                 UnregisterHotKey(hwnd, HotkeyId);
@@ -1821,8 +1942,8 @@ namespace FarmTimerOverlay
             alertStack.Children.Add(divider);
 
             Grid soundRow = MakeToggleSettingRow(
-                "Âm thanh ting ting",
-                "2 ti\u1EBFng chime khi b\u1EAFt \u0111\u1EA7u giai \u0111o\u1EA1n LOOT",
+                "Sound Alert",
+                "Pip theo nh\u1ECBp 5 gi\u00E2y cu\u1ED1i FARM + ting ting khi b\u1EAFt \u0111\u1EA7u LOOT",
                 settings.SoundLootAlert,
                 delegate(bool enabled)
                 {

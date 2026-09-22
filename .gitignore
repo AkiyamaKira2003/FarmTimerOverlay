@@ -6,7 +6,7 @@ Release-Portable/
 FarmTimerOverlay.exe
 dotnet-install.ps1
 overlay-current.png
+README.txt
 *.user
 *.suo
 *.pdb
-
