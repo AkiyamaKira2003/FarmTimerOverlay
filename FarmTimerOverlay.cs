@@ -911,8 +911,10 @@ namespace FarmTimerOverlay
             phasePill = new Border
             {
                 CornerRadius = new CornerRadius(999),
-                Padding = new Thickness(9, 4, 9, 4),
+                Padding = new Thickness(12, 4, 12, 4),
+                MinWidth = 104,
                 Background = new SolidColorBrush(Color.FromArgb(30, 105, 171, 255)),
+                HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center
             };
             StackPanel phaseRow = new StackPanel
@@ -926,7 +928,7 @@ namespace FarmTimerOverlay
                 Width = 6,
                 Height = 6,
                 Fill = farmAccent,
-                Margin = new Thickness(0, 0, 6, 0),
+                Margin = new Thickness(0, 0, 7, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
             phaseText = new TextBlock
@@ -937,6 +939,8 @@ namespace FarmTimerOverlay
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 0, 1, 0),
+                TextWrapping = TextWrapping.NoWrap,
                 FontFamily = new FontFamily("Segoe UI")
             };
             phaseRow.Children.Add(phaseDot);
@@ -1157,6 +1161,7 @@ namespace FarmTimerOverlay
             SolidColorBrush accent = isFarm ? farmAccent : lootAccent;
             string phaseName = isFarm ? "FARM" : "NH\u1EB6T TI\u1EC0N";
             phaseText.Text = timer.IsRunning ? phaseName : "D\u1EEANG";
+            phaseText.FontSize = timer.IsRunning && !isFarm ? 10.0 : 10.5;
             phaseText.Foreground = timer.IsRunning ? accent : textMuted;
             phaseDot.Fill = timer.IsRunning ? accent : textMuted;
             phasePill.Background = new SolidColorBrush(Color.FromArgb(
