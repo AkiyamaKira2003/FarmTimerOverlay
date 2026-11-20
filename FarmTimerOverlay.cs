@@ -307,6 +307,10 @@ namespace FarmTimerOverlay
 
         private static double ClampFarmSeconds(double seconds)
         {
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds))
+            {
+                return 105.0;
+            }
             double rounded = Math.Round(seconds / 5.0) * 5.0;
             return Math.Max(30.0, Math.Min(115.0, rounded));
         }
@@ -472,6 +476,10 @@ namespace FarmTimerOverlay
 
         private static double ClampVolume(double volume)
         {
+            if (double.IsNaN(volume) || double.IsInfinity(volume))
+            {
+                return 0.0;
+            }
             return Math.Max(0.0, Math.Min(1.0, volume));
         }
     }
@@ -502,6 +510,13 @@ namespace FarmTimerOverlay
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "FarmTimerOverlay",
                 "settings.ini");
+            return LoadFromPath(settingsPath);
+        }
+
+        // Separate the file path from the parser so corrupt files can be tested
+        // without touching the user's actual settings under LocalApplicationData.
+        internal static OverlaySettings LoadFromPath(string settingsPath)
+        {
             OverlaySettings settings = new OverlaySettings(settingsPath);
 
             try
@@ -525,15 +540,15 @@ namespace FarmTimerOverlay
                     string value = line.Substring(split + 1).Trim();
                     double number;
                     bool flag;
-                    if (key == "Left" && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    if (key == "Left" && TryParseFiniteDouble(value, out number))
                     {
                         settings.OverlayLeft = number;
                     }
-                    else if (key == "Top" && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    else if (key == "Top" && TryParseFiniteDouble(value, out number))
                     {
                         settings.OverlayTop = number;
                     }
-                    else if (key == "Opacity" && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    else if (key == "Opacity" && TryParseFiniteDouble(value, out number))
                     {
                         settings.Opacity = Math.Max(0.55, Math.Min(1.0, number));
                     }
@@ -541,7 +556,7 @@ namespace FarmTimerOverlay
                     {
                         settings.CustomMode = flag;
                     }
-                    else if (key == "FarmSeconds" && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    else if (key == "FarmSeconds" && TryParseFiniteDouble(value, out number))
                     {
                         settings.FarmSeconds = Math.Max(30.0, Math.Min(115.0, Math.Round(number / 5.0) * 5.0));
                     }
@@ -561,7 +576,7 @@ namespace FarmTimerOverlay
                     {
                         settings.LootTingSoundAlert = flag;
                     }
-                    else if (key == "SoundAlertVolume" && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    else if (key == "SoundAlertVolume" && TryParseFiniteDouble(value, out number))
                     {
                         settings.SoundAlertVolume = Math.Max(0.0, Math.Min(1.0, number));
                     }
@@ -571,6 +586,13 @@ namespace FarmTimerOverlay
             {
             }
             return settings;
+        }
+
+        private static bool TryParseFiniteDouble(string value, out double number)
+        {
+            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+                && !double.IsNaN(number)
+                && !double.IsInfinity(number);
         }
 
         public void Save()

@@ -38,3 +38,10 @@ It includes the .NET 8 runtime and does not require a separate .NET installation
 Project: FarmTimerOverlay.Portable.csproj
 
 Target: net8.0-windows / win-x64 / self-contained / single-file
+
+## Regression checks
+
+Run the PowerShell script tests/Verify-Settings.ps1 on Windows.
+The script builds the app using the .NET Framework C# compiler and checks settings
+parsing and timer/sound boundary values without modifying your saved app settings.
+GitHub Actions runs the same checks for commits and pull requests to main.
