@@ -82,4 +82,26 @@ Assert-Equal $clampFarm.Invoke($null, @([double]::NegativeInfinity)) 105.0 'Time
 Assert-Equal $clampVolume.Invoke($null, @([double]::NaN)) 0.0 'Sound safely silences NaN volume'
 Assert-Equal $clampVolume.Invoke($null, @([double]::PositiveInfinity)) 0.0 'Sound safely silences infinite volume'
 
+# TimerController uses a monotonic Stopwatch for elapsed time. Its UI
+# DispatcherTimer should tick only while running; explicit Changed events
+# still refresh the paused overlay on reset or settings changes.
+$instanceFlag = [Reflection.BindingFlags]'NonPublic, Instance'
+$uiTimerField = $timerType.GetField('uiTimer', $instanceFlag)
+if (!$uiTimerField) {
+    throw 'Missing TimerController UI dispatcher timer'
+}
+$controller = [Activator]::CreateInstance($timerType, @([double]105.0))
+$uiTimer = $uiTimerField.GetValue($controller)
+Assert-Equal $uiTimer.IsEnabled $false 'Initial paused timer does not refresh UI periodically'
+$controller.Start()
+Assert-Equal $uiTimer.IsEnabled $true 'Starting timer enables periodic UI refresh'
+$controller.Stop()
+Assert-Equal $uiTimer.IsEnabled $false 'Stopping timer disables periodic UI refresh'
+$controller.SetFarmSeconds(90.0)
+Assert-Equal $controller.FarmSeconds 90.0 'Paused timer still accepts changed phase duration'
+$controller.Start()
+$controller.Reset()
+Assert-Equal $uiTimer.IsEnabled $false 'Reset also stops idle UI refresh'
+Assert-Equal $controller.IsRunning $false 'Reset preserves existing paused state'
+
 Write-Output 'All Farm Timer Overlay settings regressions passed.'

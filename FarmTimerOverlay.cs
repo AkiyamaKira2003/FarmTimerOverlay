@@ -228,7 +228,8 @@ namespace FarmTimerOverlay
             uiTimer = new DispatcherTimer(DispatcherPriority.Render);
             uiTimer.Interval = TimeSpan.FromMilliseconds(80);
             uiTimer.Tick += delegate { RaiseChanged(); };
-            uiTimer.Start();
+            // The timer starts paused. Do not refresh the entire WPF overlay
+            // every 80 ms when the displayed countdown is not changing.
         }
 
         public bool IsRunning
@@ -273,6 +274,7 @@ namespace FarmTimerOverlay
                 return;
             }
             watch.Restart();
+            uiTimer.Start();
             RaiseChanged();
         }
 
@@ -284,6 +286,7 @@ namespace FarmTimerOverlay
             }
             elapsedBeforeRun += watch.Elapsed.TotalSeconds;
             watch.Reset();
+            uiTimer.Stop();
             RaiseChanged();
         }
 
@@ -291,6 +294,7 @@ namespace FarmTimerOverlay
         {
             elapsedBeforeRun = 0.0;
             watch.Reset();
+            uiTimer.Stop();
             RaiseChanged();
         }
 

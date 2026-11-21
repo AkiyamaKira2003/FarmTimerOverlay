@@ -26,6 +26,7 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Close button (X) and Alt+F4 fully exit the app instead of hiding it
 - Settings saved under %LOCALAPPDATA%\FarmTimerOverlay
 - Single-instance behavior
+- Countdown UI refreshes only while running (no 80 ms idle update loop while paused)
 
 ## Portable build
 
@@ -43,5 +44,6 @@ Target: net8.0-windows / win-x64 / self-contained / single-file
 
 Run the PowerShell script tests/Verify-Settings.ps1 on Windows.
 The script builds the app using the .NET Framework C# compiler and checks settings
-parsing and timer/sound boundary values without modifying your saved app settings.
+parsing, timer/sound boundary values, and paused/active/reset UI tick behavior
+without modifying your saved app settings.
 GitHub Actions runs the same checks for commits and pull requests to main.
