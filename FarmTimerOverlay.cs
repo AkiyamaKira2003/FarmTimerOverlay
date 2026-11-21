@@ -503,6 +503,16 @@ namespace FarmTimerOverlay
         public bool LootTingSoundAlert = true;
         public double SoundAlertVolume = 1.0;
 
+        internal bool CanPlayPulseSound()
+        {
+            return SoundLootAlert && PulseSoundAlert && SoundAlertVolume > 0.0001;
+        }
+
+        internal bool CanPlayLootTingSound()
+        {
+            return SoundLootAlert && LootTingSoundAlert && SoundAlertVolume > 0.0001;
+        }
+
         private OverlaySettings(string settingsPath)
         {
             path = settingsPath;
@@ -1288,8 +1298,7 @@ namespace FarmTimerOverlay
 
             bool shouldPulseSound = timer.IsRunning &&
                                     isFarm &&
-                                    settings.PulseSoundAlert &&
-                                    settings.SoundAlertVolume > 0.0001 &&
+                                    settings.CanPlayPulseSound() &&
                                     phaseRemaining > 0.0 &&
                                     phaseRemaining <= 5.0;
             if (shouldPulseSound && !preLootSoundActive)
@@ -1303,8 +1312,7 @@ namespace FarmTimerOverlay
 
             if (timer.IsRunning && previousFarmPhase && !isFarm)
             {
-                if (settings.LootTingSoundAlert &&
-                    settings.SoundAlertVolume > 0.0001)
+                if (settings.CanPlayLootTingSound())
                 {
                     LootAlertPlayer.PlayDoubleTing(settings.SoundAlertVolume);
                 }
@@ -1340,8 +1348,7 @@ namespace FarmTimerOverlay
                 preLootSoundTimer.Tick += delegate
                 {
                     if (!preLootSoundActive ||
-                        !settings.PulseSoundAlert ||
-                        settings.SoundAlertVolume <= 0.0001)
+                        !settings.CanPlayPulseSound())
                     {
                         StopPreLootPulseSound();
                         return;

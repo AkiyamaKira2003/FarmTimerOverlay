@@ -18,6 +18,7 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Modern two-phase progress preview
 - Red pre-LOOT warning during the final 5 seconds of FARM
 - Sound Alert dropdown with independent Pip and Ting-ting toggles
+- Sound Alert master switch mutes both automatic warning pips and LOOT chimes
 - In-app Sound Alert volume control (0-100%)
 - Soft pip synced to each red pulse during the final 5 seconds of FARM
 - Double ting-ting when LOOT begins
@@ -46,9 +47,11 @@ Target: net10.0-windows / win-x64 / self-contained / single-file
 ## Regression checks
 
 Run the PowerShell script tests/Verify-Settings.ps1 on Windows.
-The script builds the app using the .NET Framework C# compiler and checks settings
-parsing, timer/sound boundary values, and paused/active/reset UI tick behavior
-without modifying your saved app settings.
+The script compiles into a fresh temporary directory (never replacing the
+portable EXE), loads that test assembly without locking the file, and checks
+settings parsing, timer/sound boundaries, paused/active/reset UI tick behavior
+and master/individual sound toggle gating. Its alert-state checks do not open a
+WPF window, play audio or write to your saved app settings.
 GitHub Actions runs the same checks for commits and pull requests to main,
 then independently publishes the actual .NET 10 Windows x64 self-contained WPF
 application and validates the generated PE executable. It does not run the GUI
