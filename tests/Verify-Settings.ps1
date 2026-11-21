@@ -1,6 +1,7 @@
 # Offline regression checks for timer and settings value validation.
 # Requires only the C# compiler included with Windows .NET Framework 4.x.
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64/v4.0.30319/csc.exe'
 $wpf = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/WPF'
@@ -95,6 +96,40 @@ Assert-Equal $clampFarm.Invoke($null, @([double]::PositiveInfinity)) 105.0 'Time
 Assert-Equal $clampFarm.Invoke($null, @([double]::NegativeInfinity)) 105.0 'Timer ignores negative infinite farm duration'
 Assert-Equal $clampVolume.Invoke($null, @([double]::NaN)) 0.0 'Sound safely silences NaN volume'
 Assert-Equal $clampVolume.Invoke($null, @([double]::PositiveInfinity)) 0.0 'Sound safely silences infinite volume'
+
+# A virtual desktop's bounding rectangle can contain unoccupied space
+# between vertically offset monitors. A saved overlay in that gap must be
+# recovered to a real screen without constructing any WPF window.
+$visibilityType = $assembly.GetType('FarmTimerOverlay.OverlayVisibility', $false)
+if (!$visibilityType) {
+    throw 'RED: missing per-monitor visibility check (virtual-screen gaps are accepted)'
+}
+$visibilityMethod = $visibilityType.GetMethod('HasReachableArea',
+    [Reflection.BindingFlags]'NonPublic, Static')
+if (!$visibilityMethod) {
+    throw 'RED: missing per-monitor reachable-area method'
+}
+function Test-Visibility([System.Drawing.Rectangle] $window, [System.Drawing.Rectangle[]] $monitors) {
+    $argsForReflection = New-Object 'object[]' 3
+    $argsForReflection[0] = $window
+    $argsForReflection[1] = $monitors
+    $argsForReflection[2] = [int] 40
+    return [bool] $visibilityMethod.Invoke($null, $argsForReflection)
+}
+$monitors = [System.Drawing.Rectangle[]] @(
+    ([System.Drawing.Rectangle]::new(0, 0, 1920, 1080)),
+    ([System.Drawing.Rectangle]::new(1920, 400, 1920, 1080))
+)
+$gap = [System.Drawing.Rectangle]::new(2100, 100, 286, 148)
+$virtual = [System.Drawing.Rectangle]::Union($monitors[0], $monitors[1])
+Assert-Equal $virtual.Contains($gap) $true 'Legacy virtual bounding box incorrectly includes the monitor gap'
+Assert-Equal (Test-Visibility $gap $monitors) $false 'An empty monitor gap is not visible'
+Assert-Equal (Test-Visibility ([System.Drawing.Rectangle]::new(2100, 500, 286, 148)) $monitors) $true 'Valid secondary-monitor overlay is retained'
+Assert-Equal (Test-Visibility ([System.Drawing.Rectangle]::new(1870, 500, 286, 148)) $monitors) $true '40+ visible pixels on one monitor are retained'
+Assert-Equal (Test-Visibility ([System.Drawing.Rectangle]::new(1885, 100, 286, 148)) $monitors) $false 'Less than 40 visible pixels cannot count as reachable'
+$negativeOrigin = [System.Drawing.Rectangle[]] @([System.Drawing.Rectangle]::new(-1600, -300, 1600, 900))
+Assert-Equal (Test-Visibility ([System.Drawing.Rectangle]::new(-1500, -100, 286, 148)) $negativeOrigin) $true 'Negative-origin monitor is supported'
+Assert-Equal (Test-Visibility ([System.Drawing.Rectangle]::new(30, 30, 286, 148)) ([System.Drawing.Rectangle[]] @())) $false 'No monitors reported is not visible'
 
 # TimerController uses a monotonic Stopwatch for elapsed time. Its UI
 # DispatcherTimer should tick only while running; explicit Changed events

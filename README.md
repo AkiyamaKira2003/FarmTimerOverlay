@@ -28,6 +28,9 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Settings saved under %LOCALAPPDATA%\FarmTimerOverlay
 - Single-instance behavior
 - Countdown UI refreshes only while running (no 80 ms idle update loop while paused)
+- Restores an off-screen overlay to the primary work area if its saved position
+  falls into a gap between offset displays; checks individual monitor working
+  areas in screen pixels rather than the virtual desktop's bounding box
 
 ## Portable build
 
@@ -52,6 +55,10 @@ portable EXE), loads that test assembly without locking the file, and checks
 settings parsing, timer/sound boundaries, paused/active/reset UI tick behavior
 and master/individual sound toggle gating. Its alert-state checks do not open a
 WPF window, play audio or write to your saved app settings.
+Synthetic multi-monitor geometry tests also cover staggered monitors, negative
+screen origins and partially visible windows. These tests validate the
+visibility decision only; interactive multi-monitor / mixed-DPI visual QA is
+still required before an installer or release is declared accepted.
 GitHub Actions runs the same checks for commits and pull requests to main,
 then independently publishes the actual .NET 10 Windows x64 self-contained WPF
 application and validates the generated PE executable. It does not run the GUI

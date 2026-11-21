@@ -847,6 +847,31 @@ namespace FarmTimerOverlay
         }
     }
 
+    internal static class OverlayVisibility
+    {
+        // WinForms screen working areas and WPF PointToScreen coordinates are
+        // in device pixels. Checking each monitor separately avoids treating
+        // gaps inside the virtual-desktop bounding box as usable screen space.
+        internal static bool HasReachableArea(
+            Drawing.Rectangle windowPixels, Drawing.Rectangle[] monitorAreas, int minimumPixels)
+        {
+            if (monitorAreas == null || windowPixels.Width <= 0 ||
+                windowPixels.Height <= 0 || minimumPixels <= 0)
+            {
+                return false;
+            }
+            foreach (Drawing.Rectangle area in monitorAreas)
+            {
+                Drawing.Rectangle visible = Drawing.Rectangle.Intersect(windowPixels, area);
+                if (visible.Width >= minimumPixels && visible.Height >= minimumPixels)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     public sealed class FarmOverlayWindow : Window
     {
         private const int GwlExStyle = -20;
@@ -1205,9 +1230,36 @@ namespace FarmTimerOverlay
 
         private void EnsureVisible()
         {
-            Drawing.Rectangle bounds = WinForms.SystemInformation.VirtualScreen;
-            if (Left + 40 < bounds.Left || Left > bounds.Right - 40 ||
-                Top + 40 < bounds.Top || Top > bounds.Bottom - 40)
+            bool reachable = false;
+            try
+            {
+                // PointToScreen converts WPF device-independent coordinates to
+                // screen pixels, matching WinForms Screen.WorkingArea units.
+                Point topLeft = PointToScreen(new Point(0, 0));
+                Point bottomRight = PointToScreen(new Point(ActualWidth, ActualHeight));
+                if (topLeft.X >= int.MinValue && topLeft.X <= int.MaxValue &&
+                    topLeft.Y >= int.MinValue && topLeft.Y <= int.MaxValue &&
+                    bottomRight.X >= int.MinValue && bottomRight.X <= int.MaxValue &&
+                    bottomRight.Y >= int.MinValue && bottomRight.Y <= int.MaxValue)
+                {
+                    Drawing.Rectangle windowPixels = Drawing.Rectangle.FromLTRB(
+                        (int)Math.Floor(topLeft.X), (int)Math.Floor(topLeft.Y),
+                        (int)Math.Ceiling(bottomRight.X), (int)Math.Ceiling(bottomRight.Y));
+                    WinForms.Screen[] monitors = WinForms.Screen.AllScreens;
+                    Drawing.Rectangle[] areas = new Drawing.Rectangle[monitors.Length];
+                    for (int i = 0; i < monitors.Length; i++)
+                    {
+                        areas[i] = monitors[i].WorkingArea;
+                    }
+                    reachable = OverlayVisibility.HasReachableArea(windowPixels, areas, 40);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // If screen coordinates cannot be obtained during initialization,
+                // recover to the primary work area rather than losing the overlay.
+            }
+            if (!reachable)
             {
                 Rect area = SystemParameters.WorkArea;
                 Left = area.Right - Width - 22;
