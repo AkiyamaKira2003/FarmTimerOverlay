@@ -4,31 +4,45 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64/v4.0.30319/csc.exe'
 $wpf = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/WPF'
-$exe = Join-Path $root 'FarmTimerOverlay.exe'
+$testFolder = Join-Path ([System.IO.Path]::GetTempPath()) ('FarmTimerOverlay-QA-' + [Guid]::NewGuid().ToString('N'))
+$exe = Join-Path $testFolder 'FarmTimerOverlay-Tests.exe'
+$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
+$verifiedFolder = [IO.Path]::GetFullPath($testFolder)
+if ([IO.Path]::GetDirectoryName($verifiedFolder).TrimEnd('\') -ne $tempRoot -or
+    [IO.Path]::GetFileName($verifiedFolder) -notmatch '^FarmTimerOverlay-QA-[a-f0-9]{32}$') {
+    throw 'Unsafe regression build output directory'
+}
 
 if (!(Test-Path -LiteralPath $csc)) {
     throw "Missing .NET Framework C# compiler: $csc"
 }
 
-Push-Location $root
+New-Item -ItemType Directory -Path $testFolder -ErrorAction Stop | Out-Null
 try {
-    $compileArgs = @(
-        '/nologo', '/target:winexe', '/optimize+', '/win32icon:FarmTimerOverlay.ico',
-        '/out:FarmTimerOverlay.exe',
-        "/r:$wpf/PresentationCore.dll", "/r:$wpf/PresentationFramework.dll",
-        "/r:$wpf/WindowsBase.dll", '/r:System.Xaml.dll',
-        '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', 'FarmTimerOverlay.cs'
-    )
-    & $csc @compileArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Farm Timer Overlay build failed (exit code $LASTEXITCODE)"
+    Push-Location $root
+    try {
+        $compileArgs = @(
+            '/nologo', '/target:winexe', '/optimize+', '/win32icon:FarmTimerOverlay.ico',
+            "/out:$exe",
+            "/r:$wpf/PresentationCore.dll", "/r:$wpf/PresentationFramework.dll",
+            "/r:$wpf/WindowsBase.dll", '/r:System.Xaml.dll',
+            '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', 'FarmTimerOverlay.cs'
+        )
+        & $csc @compileArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Farm Timer Overlay build failed (exit code $LASTEXITCODE)"
+        }
+        # Load a byte array, not the executable path, so it can be removed
+        # without replacing or locking the user's existing portable EXE.
+        $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($exe))
+    }
+    finally {
+        Pop-Location
     }
 }
 finally {
-    Pop-Location
+    Remove-Item -LiteralPath $testFolder -Recurse -Force -ErrorAction Stop
 }
-
-$assembly = [Reflection.Assembly]::LoadFrom($exe)
 $settingsType = $assembly.GetType('FarmTimerOverlay.OverlaySettings', $true)
 $timerType = $assembly.GetType('FarmTimerOverlay.TimerController', $true)
 $soundType = $assembly.GetType('FarmTimerOverlay.LootAlertPlayer', $true)
@@ -103,5 +117,63 @@ $controller.Start()
 $controller.Reset()
 Assert-Equal $uiTimer.IsEnabled $false 'Reset also stops idle UI refresh'
 Assert-Equal $controller.IsRunning $false 'Reset preserves existing paused state'
+
+# Exercise the real pre-LOOT alert state machine without constructing or
+# showing a WPF window or writing to the user's LocalApplicationData.
+$overlayType = $assembly.GetType('FarmTimerOverlay.FarmOverlayWindow', $true)
+$handleAlerts = $overlayType.GetMethod('HandlePhaseAlerts', $instanceFlag)
+$pulseActive = $overlayType.GetField('preLootSoundActive', $instanceFlag)
+$preLootTimer = $overlayType.GetField('preLootSoundTimer', $instanceFlag)
+$settingsField = $overlayType.GetField('settings', $instanceFlag)
+$timerField = $overlayType.GetField('timer', $instanceFlag)
+$canPulse = $settingsType.GetMethod('CanPlayPulseSound', $instanceFlag)
+$canTing = $settingsType.GetMethod('CanPlayLootTingSound', $instanceFlag)
+if (!$handleAlerts -or !$pulseActive -or !$preLootTimer -or !$settingsField -or !$timerField -or
+    !$canPulse -or !$canTing) {
+    throw 'Missing pre-LOOT sound state machine reflection targets'
+}
+$settingsFile = [string]([IO.Path]::Combine([IO.Path]::GetTempPath(), ('FarmTimerOverlay-Unsaved-' + [Guid]::NewGuid().ToString('N') + '.ini')))
+$quietSettings = $loadFromPath.Invoke($null, [object[]]@($settingsFile))
+$settingsType.GetField('FlashLootAlert').SetValue($quietSettings, $false)
+$settingsType.GetField('SoundLootAlert').SetValue($quietSettings, $false)
+Assert-Equal $canPulse.Invoke($quietSettings, @()) $false 'Master Sound Alert OFF blocks pre-LOOT pip'
+Assert-Equal $canTing.Invoke($quietSettings, @()) $false 'Master Sound Alert OFF blocks LOOT chime'
+$settingsType.GetField('SoundLootAlert').SetValue($quietSettings, $true)
+Assert-Equal $canPulse.Invoke($quietSettings, @()) $true 'Master ON permits enabled pip'
+Assert-Equal $canTing.Invoke($quietSettings, @()) $true 'Master ON permits enabled chime'
+$settingsType.GetField('PulseSoundAlert').SetValue($quietSettings, $false)
+Assert-Equal $canPulse.Invoke($quietSettings, @()) $false 'Independent pip toggle still mutes pip'
+Assert-Equal $canTing.Invoke($quietSettings, @()) $true 'Independent pip toggle does not mute chime'
+$settingsType.GetField('PulseSoundAlert').SetValue($quietSettings, $true)
+$settingsType.GetField('LootTingSoundAlert').SetValue($quietSettings, $false)
+Assert-Equal $canPulse.Invoke($quietSettings, @()) $true 'Independent chime toggle does not mute pip'
+Assert-Equal $canTing.Invoke($quietSettings, @()) $false 'Independent chime toggle still mutes chime'
+$settingsType.GetField('LootTingSoundAlert').SetValue($quietSettings, $true)
+$settingsType.GetField('SoundAlertVolume').SetValue($quietSettings, [double] 0.0)
+Assert-Equal $canPulse.Invoke($quietSettings, @()) $false 'Zero volume silences pip'
+Assert-Equal $canTing.Invoke($quietSettings, @()) $false 'Zero volume silences chime'
+$settingsType.GetField('SoundAlertVolume').SetValue($quietSettings, [double] 1.0)
+$settingsType.GetField('SoundLootAlert').SetValue($quietSettings, $false)
+$probeTimer = [Activator]::CreateInstance($timerType, @([double] 105.0))
+$probeOverlay = [Runtime.Serialization.FormatterServices]::GetUninitializedObject($overlayType)
+$settingsField.SetValue($probeOverlay, $quietSettings)
+$timerField.SetValue($probeOverlay, $probeTimer)
+$probeTimer.Start()
+try {
+    $handleAlerts.Invoke($probeOverlay, [object[]]@($true, [double] 4.0)) | Out-Null
+    Assert-Equal $pulseActive.GetValue($probeOverlay) $false 'Master Sound Alert OFF prevents automatic pre-LOOT pulse'
+    $settingsType.GetField('SoundLootAlert').SetValue($quietSettings, $true)
+    $handleAlerts.Invoke($probeOverlay, [object[]]@($true, [double] 4.0)) | Out-Null
+    Assert-Equal $pulseActive.GetValue($probeOverlay) $true 'Master ON resumes automatic pre-LOOT pulse'
+    $settingsType.GetField('SoundLootAlert').SetValue($quietSettings, $false)
+    $handleAlerts.Invoke($probeOverlay, [object[]]@($true, [double] 4.0)) | Out-Null
+    Assert-Equal $pulseActive.GetValue($probeOverlay) $false 'Muting during pre-LOOT stops active pulse timer'
+}
+finally {
+    $probeTimer.Stop()
+    $activeDispatcher = $preLootTimer.GetValue($probeOverlay)
+    if ($activeDispatcher) { $activeDispatcher.Stop() }
+}
+Assert-Equal (Test-Path -LiteralPath $settingsFile) $false 'Sound test never writes user settings'
 
 Write-Output 'All Farm Timer Overlay settings regressions passed.'
