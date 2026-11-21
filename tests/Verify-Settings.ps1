@@ -111,7 +111,9 @@ try {
     $callbackReached = [pscustomobject]@{ Value = $false }
     $beforeCommit = [Action] {
         $callbackReached.Value = $true
-        Assert-Equal ([IO.File]::ReadAllText($settingsFixture)) $previousContents 'Original settings are intact before commit'
+        if ([IO.File]::ReadAllText($settingsFixture) -ne $previousContents) {
+            throw [InvalidOperationException]::new('Original settings changed before commit')
+        }
         throw [InvalidOperationException]::new('simulated interrupted save')
     }.GetNewClosure()
     $failedAsExpected = $false
