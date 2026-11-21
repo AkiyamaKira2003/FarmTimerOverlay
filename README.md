@@ -52,4 +52,8 @@ without modifying your saved app settings.
 GitHub Actions runs the same checks for commits and pull requests to main,
 then independently publishes the actual .NET 10 Windows x64 self-contained WPF
 application and validates the generated PE executable. It does not run the GUI
-or modify an existing GitHub Release.
+or modify an existing GitHub Release. Successful CI runs retain **only the
+verified EXE** as a seven-day downloadable Actions artifact for manual
+Windows acceptance; this is an unsigned build, not a release or an installed
+update. Compare its SHA-256 to the exact CI run log before testing. Do not
+assume source compilation or PE validation proves interactive GUI behavior.

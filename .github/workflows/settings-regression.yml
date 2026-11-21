@@ -55,3 +55,12 @@ jobs:
           $digest = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
           Write-Host "Published Windows PE EXE: $($file.Length) bytes, SHA-256 $digest"
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "Verified .NET 10 Windows x64 self-contained PE: $($file.Length) bytes, SHA-256 $digest. Build validation only; no GUI execution or published release."
+
+      - name: Retain the verified executable for manual Windows acceptance
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: FarmTimerOverlay-net10-win-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/farmtimer-windows-publish/Farm Timer Overlay.exe
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
