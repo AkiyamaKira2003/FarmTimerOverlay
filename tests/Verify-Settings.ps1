@@ -91,6 +91,76 @@ Assert-Equal $valid.FarmSeconds 110.0 'Farm duration is rounded to 5 seconds'
 Assert-Equal $valid.SoundAlertVolume 1.0 'Sound level is clamped to safe maximum'
 Assert-Equal $valid.CustomMode $true 'Existing boolean settings still load'
 
+# Settings are saved during dragging and toggling. A failure before commit
+# must preserve the previously valid file, not truncate it.
+$atomicWrite = $settingsType.GetMethod('WriteSettingsAtomically', $flags)
+if (!$atomicWrite) {
+    throw 'RED: settings are overwritten directly; missing atomic settings commit'
+}
+$atomicFolder = Join-Path ([IO.Path]::GetTempPath()) ('FarmTimerOverlay-Atomic-' + [Guid]::NewGuid().ToString('N'))
+$verifiedAtomicFolder = [IO.Path]::GetFullPath($atomicFolder)
+if ([IO.Path]::GetDirectoryName($verifiedAtomicFolder).TrimEnd('\') -ne $tempRoot -or
+    [IO.Path]::GetFileName($verifiedAtomicFolder) -notmatch '^FarmTimerOverlay-Atomic-[a-f0-9]{32}$') {
+    throw 'Unsafe settings test directory'
+}
+New-Item -ItemType Directory -Path $verifiedAtomicFolder -ErrorAction Stop | Out-Null
+try {
+    $settingsFixture = Join-Path $verifiedAtomicFolder 'settings.ini'
+    $previousContents = 'Opacity=0.80' + [Environment]::NewLine + 'FarmSeconds=105' + [Environment]::NewLine
+    [IO.File]::WriteAllText($settingsFixture, $previousContents, [Text.UTF8Encoding]::new($false))
+    $callbackReached = [pscustomobject]@{ Value = $false }
+    $beforeCommit = [Action] {
+        $callbackReached.Value = $true
+        Assert-Equal ([IO.File]::ReadAllText($settingsFixture)) $previousContents 'Original settings are intact before commit'
+        throw [InvalidOperationException]::new('simulated interrupted save')
+    }.GetNewClosure()
+    $failedAsExpected = $false
+    try {
+        $callArgs = New-Object 'object[]' 3
+        $callArgs[0] = [string] $settingsFixture
+        $callArgs[1] = [string[]] @('Opacity=0.60', 'FarmSeconds=90')
+        $callArgs[2] = [Action] $beforeCommit
+        $atomicWrite.Invoke($null, $callArgs) | Out-Null
+    }
+    catch {
+        $failedAsExpected = $_.Exception.Message -match 'simulated interrupted save'
+        if (!$failedAsExpected) { throw }
+    }
+    Assert-Equal $failedAsExpected $true 'Simulated commit interruption reaches test hook'
+    Assert-Equal $callbackReached.Value $true 'Interruption happened after staging'
+    Assert-Equal ([IO.File]::ReadAllText($settingsFixture)) $previousContents 'Failed commit preserves complete previous settings'
+    Assert-Equal @(Get-ChildItem -LiteralPath $verifiedAtomicFolder -File).Count 1 'Failed commit leaves no temporary files'
+
+    $callArgs[2] = $null
+    $atomicWrite.Invoke($null, $callArgs) | Out-Null
+    $loadArgs = New-Object 'object[]' 1
+    $loadArgs[0] = [string] $settingsFixture
+    $saved = $loadFromPath.Invoke($null, $loadArgs)
+    Assert-Equal $saved.Opacity 0.60 'Successful atomic replace loads updated opacity'
+    Assert-Equal $saved.FarmSeconds 90.0 'Successful atomic replace loads updated farm time'
+    Assert-Equal @(Get-ChildItem -LiteralPath $verifiedAtomicFolder -File).Count 1 'Successful commit leaves no temporary files'
+    $saved.Opacity = 0.77
+    $saved.FarmSeconds = 95.0
+    $saved.Save()
+    $reloaded = $loadFromPath.Invoke($null, $loadArgs)
+    Assert-Equal $reloaded.Opacity 0.77 'Real settings Save() persists opacity through the safe writer'
+    Assert-Equal $reloaded.FarmSeconds 95.0 'Real settings Save() persists farm duration through the safe writer'
+    Assert-Equal @(Get-ChildItem -LiteralPath $verifiedAtomicFolder -File).Count 1 'Real Save() leaves no temporary files'
+
+    $newFixture = Join-Path $verifiedAtomicFolder 'new-settings.ini'
+    $callArgs[0] = [string] $newFixture
+    $callArgs[1] = [string[]] @('Opacity=0.70')
+    $atomicWrite.Invoke($null, $callArgs) | Out-Null
+    Assert-Equal ([IO.File]::Exists($newFixture)) $true 'First save safely creates a new settings file'
+    Assert-Equal @(Get-ChildItem -LiteralPath $verifiedAtomicFolder -File).Count 2 'New settings commit leaves no temporary files'
+}
+finally {
+    if ((Test-Path -LiteralPath $verifiedAtomicFolder) -and
+        ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($verifiedAtomicFolder)).TrimEnd('\') -eq $tempRoot)) {
+        Remove-Item -LiteralPath $verifiedAtomicFolder -Recurse -Force -ErrorAction Stop
+    }
+}
+
 Assert-Equal $clampFarm.Invoke($null, @([double]::NaN)) 105.0 'Timer ignores NaN farm duration'
 Assert-Equal $clampFarm.Invoke($null, @([double]::PositiveInfinity)) 105.0 'Timer ignores infinite farm duration'
 Assert-Equal $clampFarm.Invoke($null, @([double]::NegativeInfinity)) 105.0 'Timer ignores negative infinite farm duration'

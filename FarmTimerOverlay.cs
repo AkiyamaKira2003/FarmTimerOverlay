@@ -609,6 +609,51 @@ namespace FarmTimerOverlay
                 && !double.IsInfinity(number);
         }
 
+        internal static void WriteSettingsAtomically(string destination, string[] lines, Action beforeCommit)
+        {
+            // File.WriteAllLines truncates the live INI before writing it.
+            // Stage on the same volume and swap only after all bytes are flushed,
+            // so a failed save cannot destroy the previous valid configuration.
+            string temporary = destination + "." + Guid.NewGuid().ToString("N") + ".writing";
+            try
+            {
+                using (FileStream stream = new FileStream(
+                    temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (StreamWriter writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                {
+                    foreach (string line in lines)
+                    {
+                        writer.WriteLine(line);
+                    }
+                    writer.Flush();
+                    stream.Flush(true);
+                }
+
+                // Internal test seam: simulate failure after a complete stage
+                // but before the destination file is replaced.
+                if (beforeCommit != null)
+                {
+                    beforeCommit();
+                }
+
+                if (File.Exists(destination))
+                {
+                    File.Replace(temporary, destination, null);
+                }
+                else
+                {
+                    File.Move(temporary, destination);
+                }
+            }
+            finally
+            {
+                if (File.Exists(temporary))
+                {
+                    File.Delete(temporary);
+                }
+            }
+        }
+
         public void Save()
         {
             try
@@ -618,7 +663,7 @@ namespace FarmTimerOverlay
                 {
                     Directory.CreateDirectory(folder);
                 }
-                File.WriteAllLines(path, new string[]
+                WriteSettingsAtomically(path, new string[]
                 {
                     "Left=" + OverlayLeft.ToString("0.###", CultureInfo.InvariantCulture),
                     "Top=" + OverlayTop.ToString("0.###", CultureInfo.InvariantCulture),
@@ -630,7 +675,7 @@ namespace FarmTimerOverlay
                     "PulseSoundAlert=" + PulseSoundAlert.ToString(CultureInfo.InvariantCulture),
                     "LootTingSoundAlert=" + LootTingSoundAlert.ToString(CultureInfo.InvariantCulture),
                     "SoundAlertVolume=" + SoundAlertVolume.ToString("0.00", CultureInfo.InvariantCulture)
-                });
+                }, null);
             }
             catch
             {

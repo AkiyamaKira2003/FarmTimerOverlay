@@ -26,6 +26,9 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 - Tray controls for pause/resume, reset and exit
 - Close button (X) and Alt+F4 fully exit the app instead of hiding it
 - Settings saved under %LOCALAPPDATA%\FarmTimerOverlay
+- Settings writes stage to a same-folder temporary file and replace the INI
+  only after flushing, preserving the previous complete file if staging or
+  the pre-commit step fails; interrupted power-loss durability is not certified
 - Single-instance behavior
 - Countdown UI refreshes only while running (no 80 ms idle update loop while paused)
 - Restores an off-screen overlay to the primary work area if its saved position
@@ -55,6 +58,8 @@ portable EXE), loads that test assembly without locking the file, and checks
 settings parsing, timer/sound boundaries, paused/active/reset UI tick behavior
 and master/individual sound toggle gating. Its alert-state checks do not open a
 WPF window, play audio or write to your saved app settings.
+Settings persistence tests use a uniquely owned temporary directory to verify
+failed-save preservation, replace/create, and a real Save()/reload roundtrip.
 Synthetic multi-monitor geometry tests also cover staggered monitors, negative
 screen origins and partially visible windows. These tests validate the
 visibility decision only; interactive multi-monitor / mixed-DPI visual QA is
