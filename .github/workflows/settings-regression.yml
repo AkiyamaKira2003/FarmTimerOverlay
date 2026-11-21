@@ -21,3 +21,37 @@ jobs:
       - name: Build and exercise settings boundary values
         shell: powershell
         run: ./tests/Verify-Settings.ps1
+
+      - name: Install supported .NET 10 LTS SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish and verify the actual self-contained Windows WPF application
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'farmtimer-windows-publish'
+          dotnet publish .\FarmTimerOverlay.Portable.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $output --nologo
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Real .NET 10 Windows x64 single-file publish failed.'
+          }
+          $exe = Join-Path $output 'Farm Timer Overlay.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw 'Missing single-file Windows EXE from .NET 10 publish.'
+          }
+          $file = Get-Item -LiteralPath $exe
+          if ($file.Length -lt 1048576) {
+            throw 'Published self-contained Windows executable is unexpectedly small.'
+          }
+          $stream = [IO.File]::OpenRead($exe)
+          try {
+            if ($stream.ReadByte() -ne 0x4D -or $stream.ReadByte() -ne 0x5A) {
+              throw 'Published file does not have a Windows PE executable header.'
+            }
+          }
+          finally {
+            $stream.Dispose()
+          }
+          $digest = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          Write-Host "Published Windows PE EXE: $($file.Length) bytes, SHA-256 $digest"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "Verified .NET 10 Windows x64 self-contained PE: $($file.Length) bytes, SHA-256 $digest. Build validation only; no GUI execution or published release."
