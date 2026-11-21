@@ -32,13 +32,16 @@ Windows 10/11 x64 overlay timer for a repeating 2-minute farming loop.
 
 The GitHub Release contains a single self-contained Farm Timer Overlay.exe for Windows x64.
 
-It includes the .NET 8 runtime and does not require a separate .NET installation.
+New source builds target supported **.NET 10 LTS** after .NET 8 reached end of support
+on November 10, 2026. The existing released executable is **not** automatically upgraded;
+release assets must be rebuilt and verified separately. Self-contained builds do not
+require a separate .NET runtime installation.
 
 ## Build
 
 Project: FarmTimerOverlay.Portable.csproj
 
-Target: net8.0-windows / win-x64 / self-contained / single-file
+Target: net10.0-windows / win-x64 / self-contained / single-file
 
 ## Regression checks
 
@@ -46,4 +49,7 @@ Run the PowerShell script tests/Verify-Settings.ps1 on Windows.
 The script builds the app using the .NET Framework C# compiler and checks settings
 parsing, timer/sound boundary values, and paused/active/reset UI tick behavior
 without modifying your saved app settings.
-GitHub Actions runs the same checks for commits and pull requests to main.
+GitHub Actions runs the same checks for commits and pull requests to main,
+then independently publishes the actual .NET 10 Windows x64 self-contained WPF
+application and validates the generated PE executable. It does not run the GUI
+or modify an existing GitHub Release.
